@@ -1,1 +1,769 @@
-1
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Activity, 
+  Utensils, 
+  ShoppingCart, 
+  Settings, 
+  ChevronRight, 
+  RefreshCw, 
+  Check, 
+  Trash2,
+  Flame,
+  Droplet,
+  Wheat,
+  Dumbbell
+} from 'lucide-react';
+
+// --- БАЗА ДАННЫХ ПРОДУКТОВ (HARDCODED) ---
+const FOOD_DB = {
+  proteins: [
+    // Птица
+    { name: 'Куриное филе (отварное/запеченное)', p: 23.6, f: 1.9, c: 0.4, k: 113 },
+    { name: 'Филе индейки', p: 25, f: 1, c: 0, k: 110 },
+    // Мясо
+    { name: 'Говядина постная', p: 20, f: 5, c: 0, k: 130 },
+    // Рыба и Морепродукты
+    { name: 'Белая рыба (Треска/Минтай/Тилапия)', p: 17.8, f: 0.7, c: 0, k: 78 },
+    { name: 'Лосось/Форель (Омега-3)', p: 20, f: 13, c: 0, k: 208 },
+    { name: 'Креветки/Кальмары', p: 18, f: 1, c: 0, k: 95 },
+    // Яйца и Молочка
+    { name: 'Яйца куриные (вареные/омлет)', p: 12.7, f: 11.5, c: 0.7, k: 157 },
+    { name: 'Творог 5%', p: 17.2, f: 5, c: 1.8, k: 121 },
+    { name: 'Греческий йогурт', p: 8, f: 2, c: 3.5, k: 65 },
+  ],
+  carbs: [
+    // Крупы
+    { name: 'Гречка (вар)', p: 4.2, f: 1.1, c: 21.3, k: 110 },
+    { name: 'Киноа (вар)', p: 4.4, f: 1.9, c: 21.3, k: 120 },
+    { name: 'Овсянка (длит. варки)', p: 3, f: 1.7, c: 15, k: 88 },
+    { name: 'Бурый/Красный рис', p: 2.6, f: 0.9, c: 23, k: 111 },
+    { name: 'Перловка', p: 2.3, f: 0.4, c: 28, k: 123 },
+    // Бобовые
+    { name: 'Чечевица (вар)', p: 9, f: 0.4, c: 20, k: 116 },
+    { name: 'Нут (вар)', p: 7, f: 2.5, c: 27, k: 160 },
+    // Фрукты и Ягоды (Низкий ГИ)
+    { name: 'Зеленое яблоко', p: 0.4, f: 0.4, c: 9.8, k: 47 },
+    { name: 'Голубика/Черника', p: 1, f: 0.5, c: 14, k: 57 },
+    { name: 'Малина', p: 1.2, f: 0.6, c: 12, k: 52 },
+  ],
+  fats: [
+    // Масла (Только завтрак)
+    { name: 'Масло оливковое', p: 0, f: 99.8, c: 0, k: 898 },
+    { name: 'Масло льняное', p: 0, f: 99.8, c: 0, k: 898 },
+    // Орехи и Семена (Можно в любое время)
+    { name: 'Авокадо', p: 2, f: 14.7, c: 1.8, k: 160 },
+    { name: 'Грецкие орехи', p: 15.2, f: 65.2, c: 7, k: 654 },
+    { name: 'Миндаль', p: 18, f: 49, c: 21, k: 575 },
+    { name: 'Тыквенные семечки (Цинк)', p: 19, f: 45, c: 15, k: 540 },
+  ],
+  veggies: [
+    { name: 'Огурцы', p: 0.8, f: 0.1, c: 2.5, k: 15 },
+    { name: 'Брокколи', p: 2.8, f: 0.4, c: 6.6, k: 34 },
+    { name: 'Цветная капуста', p: 2.5, f: 0.3, c: 4.2, k: 25 },
+    { name: 'Шпинат', p: 2.9, f: 0.4, c: 2, k: 23 },
+    { name: 'Кабачки', p: 0.6, f: 0.3, c: 4.6, k: 24 },
+    { name: 'Капуста (Белокочанная/Пекинская)', p: 1.8, f: 0.1, c: 4.7, k: 27 },
+    { name: 'Болгарский перец', p: 1.3, f: 0.1, c: 5.3, k: 27 },
+    { name: 'Стебель сельдерея', p: 0.9, f: 0.1, c: 2.1, k: 13 },
+    { name: 'Стручковая фасоль', p: 2, f: 0.2, c: 3.6, k: 31 },
+    { name: 'Микс зелени', p: 1.5, f: 0.2, c: 3, k: 20 },
+  ],
+};
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+// Расчет калорий и БЖУ
+const calculateStrategy = (params) => {
+  const { gender, weight, height, age, activity } = params;
+  
+  // Формула Миффлина-Сан Жеора
+  let bmr = 10 * weight + 6.25 * height - 5 * age;
+  bmr += gender === 'male' ? 5 : -161;
+  
+  const tdee = bmr * parseFloat(activity);
+  const targetKcal = Math.round(tdee * 0.8); // Дефицит 20%
+  
+  // Расчет макросов
+  // Белок: 2г на кг, но не более 40% калорийности
+  let proteinGrams = weight * 2;
+  const proteinKcal = proteinGrams * 4;
+  if (proteinKcal > targetKcal * 0.4) {
+    proteinGrams = (targetKcal * 0.4) / 4;
+  }
+  
+  // Жиры: 1г на кг
+  const fatGrams = weight * 1;
+  const fatKcal = fatGrams * 9;
+  
+  // Углеводы: остаток
+  let carbKcal = targetKcal - proteinKcal - fatKcal;
+  if (carbKcal < 0) carbKcal = 0; // Защита от дурака
+  const carbGrams = carbKcal / 4;
+
+  return {
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    targetKcal,
+    macros: {
+      p: Math.round(proteinGrams),
+      f: Math.round(fatGrams),
+      c: Math.round(carbGrams)
+    }
+  };
+};
+
+// Генератор случайного продукта из категории с фильтром
+const getRandomFood = (category, filterFn = () => true) => {
+  const list = FOOD_DB[category].filter(filterFn);
+  if (list.length === 0) return FOOD_DB[category][0]; // Fallback
+  return list[Math.floor(Math.random() * list.length)];
+};
+
+// Расчет веса продукта на основе целевых макросов приема пищи
+const calculateFoodWeight = (food, targetValue, targetMacroKey) => {
+  if (food[targetMacroKey] === 0) return 0;
+  const weight = (targetValue / food[targetMacroKey]) * 100;
+  return Math.round(weight);
+};
+
+// Помощник для расчета БЖУ порции
+const getPortionStats = (food, weight) => {
+  return {
+    p: (food.p * weight) / 100,
+    f: (food.f * weight) / 100,
+    c: (food.c * weight) / 100,
+    k: (food.k * weight) / 100
+  };
+};
+
+// Генерация одного дня (Каскадный метод)
+const generateDayMenu = (dailyMacros) => {
+  const dayPlan = {
+    breakfast: [],
+    lunch: [],
+    snack: [],
+    dinner: []
+  };
+
+  // Цели на каждый прием пищи (в % от дневной нормы)
+  const targets = {
+    breakfast: { p: dailyMacros.p * 0.30, f: dailyMacros.f * 0.30, c: dailyMacros.c * 0.40 },
+    lunch:     { p: dailyMacros.p * 0.35, f: dailyMacros.f * 0.30, c: dailyMacros.c * 0.45 },
+    dinner:    { p: dailyMacros.p * 0.25, f: dailyMacros.f * 0.30, c: 0 }, // Anti-Water (0 carbs)
+    snack:     { p: dailyMacros.p * 0.10, f: dailyMacros.f * 0.10, c: dailyMacros.c * 0.15 }
+  };
+
+  // Функция сборки приема пищи
+  const buildMeal = (mealName, templates) => {
+    let currentStats = { p: 0, f: 0, c: 0 };
+    const mealTarget = targets[mealName];
+
+    // 1. Сначала добавляем овощи (если есть в шаблоне), так как их вес фиксирован
+    if (templates.includes('veggies')) {
+      const food = getRandomFood('veggies');
+      const weight = mealName === 'dinner' ? 200 : 150; // Вечером больше овощей
+      const stats = getPortionStats(food, weight);
+      
+      dayPlan[mealName].push({ ...food, weight, type: 'veggies' });
+      currentStats.p += stats.p;
+      currentStats.f += stats.f;
+      currentStats.c += stats.c;
+    }
+
+    // 2. Белок (Главный приоритет)
+    if (templates.includes('proteins')) {
+      const food = getRandomFood('proteins');
+      // Считаем вес, чтобы закрыть остаток цели по белку
+      const neededP = Math.max(0, mealTarget.p - currentStats.p);
+      const weight = calculateFoodWeight(food, neededP, 'p');
+      const stats = getPortionStats(food, weight);
+
+      dayPlan[mealName].push({ ...food, weight, type: 'proteins' });
+      currentStats.p += stats.p;
+      currentStats.f += stats.f; 
+      currentStats.c += stats.c;
+    }
+
+    // 3. Углеводы (Заполняем остаток, если нужен)
+    if (templates.includes('carbs')) {
+      const food = getRandomFood('carbs');
+      const neededC = Math.max(0, mealTarget.c - currentStats.c);
+      const weight = calculateFoodWeight(food, neededC, 'c');
+      const stats = getPortionStats(food, weight);
+
+      dayPlan[mealName].push({ ...food, weight, type: 'carbs' });
+      currentStats.p += stats.p; 
+      currentStats.f += stats.f;
+      currentStats.c += stats.c;
+    }
+
+    // 4. Жиры (Заполняем остаток, если нужен)
+    if (templates.includes('fats')) {
+      // ФИЛЬТР: Если это НЕ завтрак, исключаем масла (оставляем только орехи/авокадо)
+      const fatFilter = (item) => {
+        if (mealName !== 'breakfast') {
+          return !item.name.toLowerCase().includes('масло');
+        }
+        return true;
+      };
+
+      const food = getRandomFood('fats', fatFilter);
+      const neededF = Math.max(0, mealTarget.f - currentStats.f);
+      const weight = calculateFoodWeight(food, neededF, 'f');
+      
+      // Если вес слишком маленький (меньше 5г), не добавляем (крошка ореха), кроме масел
+      if (weight >= 5) {
+        dayPlan[mealName].push({ ...food, weight, type: 'fats' });
+      }
+    }
+  };
+
+  // Строим приемы пищи
+  buildMeal('breakfast', ['proteins', 'fats', 'carbs']);
+  buildMeal('lunch',     ['veggies', 'proteins', 'carbs', 'fats']);
+  buildMeal('snack',     ['proteins', 'fats']); 
+  buildMeal('dinner',    ['veggies', 'proteins', 'fats']);
+
+  return dayPlan;
+};
+
+const generateWeekMenu = (macros) => {
+  const week = [];
+  for (let i = 0; i < 7; i++) {
+    week.push(generateDayMenu(macros));
+  }
+  return week;
+};
+
+
+// --- КОМПОНЕНТЫ ИНТЕРФЕЙСА ---
+
+const TabBar = ({ active, setActive }) => (
+  <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 h-20 px-6 flex justify-between items-center z-50">
+    <button onClick={() => setActive('dashboard')} className={`flex flex-col items-center space-y-1 transition-colors duration-300 ${active === 'dashboard' ? 'text-orange-500 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
+      <Activity size={24} />
+      <span className="text-xs font-medium">Главная</span>
+    </button>
+    <button onClick={() => setActive('menu')} className={`flex flex-col items-center space-y-1 transition-colors duration-300 ${active === 'menu' ? 'text-orange-500 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
+      <Utensils size={24} />
+      <span className="text-xs font-medium">Меню</span>
+    </button>
+    <button onClick={() => setActive('grocery')} className={`flex flex-col items-center space-y-1 transition-colors duration-300 ${active === 'grocery' ? 'text-orange-500 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
+      <ShoppingCart size={24} />
+      <span className="text-xs font-medium">Корзина</span>
+    </button>
+    <button onClick={() => setActive('settings')} className={`flex flex-col items-center space-y-1 transition-colors duration-300 ${active === 'settings' ? 'text-orange-500 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
+      <Settings size={24} />
+      <span className="text-xs font-medium">Инфо</span>
+    </button>
+  </div>
+);
+
+const MealCard = ({ title, items, type, onSwap }) => (
+  <div className="bg-gray-800 rounded-2xl p-5 border border-gray-700 mb-4 transform transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-orange-900/10 hover:border-teal-500 group">
+    <h3 className="text-orange-500 font-bold mb-3 flex justify-between transition-colors">
+      {title}
+      <span className="text-xs text-gray-400 font-normal bg-gray-900 px-2 py-1 rounded-lg border border-gray-700 group-hover:border-teal-500/30 transition-colors">
+          {Math.round(items.reduce((acc, i) => acc + (i.k * i.weight/100), 0))} ккал
+      </span>
+    </h3>
+    <div className="space-y-3">
+      {items.map((item, idx) => (
+        <div key={idx} className="flex items-center justify-between group/item">
+          <div>
+            <p className="text-white font-medium group-hover/item:text-orange-200 transition-colors">{item.name}</p>
+            <p className="text-sm text-gray-400">{item.weight} г</p>
+          </div>
+          <button 
+            onClick={(e) => {
+              e.preventDefault();
+              onSwap(type, idx, item.type);
+            }}
+            className="p-2 text-gray-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-full transition-all duration-300 cursor-pointer hover:rotate-180"
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ЭКРАН ОНБОРДИНГА
+const Onboarding = ({ onComplete }) => {
+  const [form, setForm] = useState({
+    gender: 'female',
+    age: '',
+    height: '',
+    weight: '',
+    activity: '1.2'
+  });
+  const [errors, setErrors] = useState({});
+
+  const handleChange = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: false }));
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    const newErrors = {};
+    if (!form.age) newErrors.age = true;
+    if (!form.height) newErrors.height = true;
+    if (!form.weight) newErrors.weight = true;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    
+    const result = calculateStrategy(form);
+    onComplete({ params: form, strategy: result });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6 text-white">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4 animate-bounce-slow">
+            <Activity className="w-8 h-8 text-orange-500" />
+          </div>
+          <h1 className="text-3xl font-bold text-white">Pocket Nutritionist</h1>
+          <p className="text-gray-400 mt-2">Персональная стратегия питания Anti-Water</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              type="button"
+              onClick={() => handleChange('gender', 'male')}
+              className={`p-3 rounded-xl border text-center transition-all duration-300 hover:scale-105 ${form.gender === 'male' ? 'bg-orange-500/20 border-orange-500 text-orange-500' : 'border-gray-600 text-gray-400 hover:border-gray-500'}`}
+            >
+              Мужчина
+            </button>
+            <button 
+              type="button"
+              onClick={() => handleChange('gender', 'female')}
+              className={`p-3 rounded-xl border text-center transition-all duration-300 hover:scale-105 ${form.gender === 'female' ? 'bg-orange-500/20 border-orange-500 text-orange-500' : 'border-gray-600 text-gray-400 hover:border-gray-500'}`}
+            >
+              Женщина
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-sm mb-1 ${errors.age ? 'text-red-500' : 'text-gray-400'}`}>
+                Возраст (лет) {errors.age && '*'}
+              </label>
+              <input 
+                type="number" 
+                value={form.age}
+                onChange={(e) => handleChange('age', e.target.value)}
+                className={`w-full bg-gray-900 border rounded-xl p-3 text-white focus:outline-none transition-colors ${
+                  errors.age 
+                    ? 'border-red-600 focus:border-red-600 placeholder:text-red-400/50' 
+                    : 'border-gray-700 focus:border-orange-500'
+                }`}
+                placeholder="25"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-sm mb-1 ${errors.height ? 'text-red-500' : 'text-gray-400'}`}>
+                  Рост (см) {errors.height && '*'}
+                </label>
+                <input 
+                  type="number" 
+                  value={form.height}
+                  onChange={(e) => handleChange('height', e.target.value)}
+                  className={`w-full bg-gray-900 border rounded-xl p-3 text-white focus:outline-none transition-colors ${
+                    errors.height 
+                      ? 'border-red-600 focus:border-red-600 placeholder:text-red-400/50' 
+                      : 'border-gray-700 focus:border-orange-500'
+                  }`}
+                  placeholder="170"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm mb-1 ${errors.weight ? 'text-red-500' : 'text-gray-400'}`}>
+                  Вес (кг) {errors.weight && '*'}
+                </label>
+                <input 
+                  type="number" 
+                  value={form.weight}
+                  onChange={(e) => handleChange('weight', e.target.value)}
+                  className={`w-full bg-gray-900 border rounded-xl p-3 text-white focus:outline-none transition-colors ${
+                    errors.weight 
+                      ? 'border-red-600 focus:border-red-600 placeholder:text-red-400/50' 
+                      : 'border-gray-700 focus:border-orange-500'
+                  }`}
+                  placeholder="65"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Активность</label>
+              <select 
+                value={form.activity}
+                onChange={(e) => handleChange('activity', e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white focus:border-orange-500 focus:outline-none appearance-none"
+              >
+                <option value="1.2">Сидячий образ жизни</option>
+                <option value="1.375">Легкая активность (1-3 трен.)</option>
+                <option value="1.55">Средняя активность (3-5 трен.)</option>
+                <option value="1.725">Высокая активность (6-7 трен.)</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 mt-4">
+            Рассчитать стратегию <ChevronRight size={20} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ГЛАВНЫЙ ЭКРАН
+const Dashboard = ({ strategy }) => {
+  return (
+    <div className="p-6 pb-24 space-y-6 animate-fade-in">
+      <header>
+        <h2 className="text-2xl font-bold text-white">Моя стратегия</h2>
+        <p className="text-gray-400">Протокол Metabolic Reset</p>
+      </header>
+
+      <div className="bg-gradient-to-br from-orange-600 to-red-700 rounded-3xl p-6 text-white shadow-lg shadow-orange-900/50 relative overflow-hidden transform transition-transform duration-300 hover:scale-[1.02] cursor-default hover:border hover:border-teal-500">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+        <div className="relative z-10">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-5xl font-bold">{strategy.targetKcal}</h3>
+            <span className="text-lg opacity-80">ккал/день</span>
+          </div>
+          <p className="text-sm text-orange-100 mt-1 opacity-80">Дефицит 20% для жиросжигания</p>
+          
+          <div className="mt-6 flex gap-4">
+            <div className="bg-white/10 rounded-xl p-3 flex-1 backdrop-blur-sm">
+              <p className="text-xs opacity-70 mb-1">Базовый обмен</p>
+              <p className="font-semibold">{strategy.bmr} ккал</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-3 flex-1 backdrop-blur-sm">
+              <p className="text-xs opacity-70 mb-1">Расход (TDEE)</p>
+              <p className="font-semibold">{strategy.tdee} ккал</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex flex-col items-center transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-teal-500 group">
+          <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <Dumbbell size={20} />
+          </div>
+          <span className="text-2xl font-bold text-white">{strategy.macros.p}г</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wider mt-1">Белки</span>
+        </div>
+        <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex flex-col items-center transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-teal-500 group">
+          <div className="w-10 h-10 rounded-full bg-orange-500/20 text-orange-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <Droplet size={20} />
+          </div>
+          <span className="text-2xl font-bold text-white">{strategy.macros.f}г</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wider mt-1">Жиры</span>
+        </div>
+        <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex flex-col items-center transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-teal-500 group">
+          <div className="w-10 h-10 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <Wheat size={20} />
+          </div>
+          <span className="text-2xl font-bold text-white">{strategy.macros.c}г</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wider mt-1">Углеводы</span>
+        </div>
+      </div>
+
+      <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 transform transition-all hover:border-teal-500">
+        <h4 className="text-orange-500 font-semibold mb-2 flex items-center gap-2">
+          <Flame size={18} /> Правила протокола
+        </h4>
+        <ul className="space-y-2 text-sm text-gray-300">
+          <li className="flex gap-2"><Check size={16} className="text-orange-500 shrink-0" /> Утро: 1-2 ст.л. льняного масла натощак</li>
+          <li className="flex gap-2"><Check size={16} className="text-orange-500 shrink-0" /> Приоритет белка (сохраняем мышцы)</li>
+          <li className="flex gap-2"><Check size={16} className="text-orange-500 shrink-0" /> Ужин без углеводов (сливаем воду)</li>
+          <li className="flex gap-2"><Check size={16} className="text-orange-500 shrink-0" /> Овощи в каждый прием пищи</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+// ЭКРАН МЕНЮ
+const MealPlan = ({ menu, setMenu, strategy }) => {
+  const [day, setDay] = useState(0);
+
+  const handleSwap = (mealType, idx, itemType) => {
+    const currentDay = menu[day];
+    const oldItem = currentDay[mealType][idx];
+    const list = FOOD_DB[itemType];
+    
+    // Выбираем альтернативу с учетом ограничений на масла
+    let sourceList = list.filter(i => i.name !== oldItem.name);
+    
+    // ФИЛЬТР ДЛЯ ЗАМЕНЫ: Если не завтрак, исключаем масла
+    if (itemType === 'fats' && mealType !== 'breakfast') {
+      sourceList = sourceList.filter(i => !i.name.toLowerCase().includes('масло'));
+    }
+
+    // Если список кандидатов пуст (fallback), берем исходный список (но также фильтруем если надо)
+    if (sourceList.length === 0) {
+         if (itemType === 'fats' && mealType !== 'breakfast') {
+            sourceList = list.filter(i => !i.name.toLowerCase().includes('масло'));
+         } else {
+            sourceList = list;
+         }
+    }
+    
+    const newItem = sourceList[Math.floor(Math.random() * sourceList.length)];
+    
+    // Пересчет веса: пропорция по КЛЮЧЕВОМУ макросу продукта
+    let targetMacro = 'p';
+    if (itemType === 'fats') targetMacro = 'f';
+    if (itemType === 'carbs') targetMacro = 'c';
+    // Овощи не пересчитываем (объем)
+    
+    let newWeight = oldItem.weight;
+
+    if (itemType !== 'veggies') {
+      const targetValue = (oldItem.weight / 100) * oldItem[targetMacro];
+      newWeight = calculateFoodWeight(newItem, targetValue, targetMacro);
+    }
+
+    const newMenu = [...menu];
+    const newDay = { ...newMenu[day] };
+    const newMeal = [...newDay[mealType]];
+    
+    newMeal[idx] = { 
+      ...newItem, 
+      weight: newWeight, 
+      type: itemType 
+    };
+    
+    newDay[mealType] = newMeal;
+    newMenu[day] = newDay;
+    
+    setMenu(newMenu);
+  };
+
+  return (
+    <div className="p-4 pb-24 min-h-screen">
+      <div className="flex overflow-x-auto gap-2 pb-4 mb-2 no-scrollbar">
+        {['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'].map((d, i) => (
+          <button 
+            key={i}
+            onClick={() => setDay(i)}
+            className={`flex-shrink-0 w-12 h-14 rounded-xl flex flex-col items-center justify-center text-sm font-bold transition-all duration-200 transform hover:scale-105 ${
+              day === i 
+              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25' 
+              : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <span>{d}</span>
+            <span className="text-[10px] font-normal opacity-60">День {i+1}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="animate-fade-in">
+        <MealCard title="Завтрак" items={menu[day].breakfast} type="breakfast" onSwap={handleSwap} />
+        <MealCard title="Обед" items={menu[day].lunch} type="lunch" onSwap={handleSwap} />
+        <MealCard title="Перекус" items={menu[day].snack} type="snack" onSwap={handleSwap} />
+        <MealCard title="Ужин (Без углеводов)" items={menu[day].dinner} type="dinner" onSwap={handleSwap} />
+      </div>
+      
+      <div className="text-center mt-8 mb-4">
+          <button 
+            onClick={() => setMenu(generateWeekMenu(strategy.macros))}
+            className="text-xs text-gray-500 underline hover:text-orange-500 transition-colors"
+          >
+            Пересоздать меню на неделю
+          </button>
+      </div>
+    </div>
+  );
+};
+
+// ЭКРАН СПИСКА ПОКУПОК
+const GroceryList = ({ menu }) => {
+  const [period, setPeriod] = useState(3);
+  
+  // Ленивая инициализация состояния галочек из LocalStorage
+  const [checked, setChecked] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pn_grocery_checked');
+      return saved ? JSON.parse(saved) : {};
+    } catch(e) {
+      return {};
+    }
+  });
+
+  // Сохранение галочек при изменении
+  useEffect(() => {
+    localStorage.setItem('pn_grocery_checked', JSON.stringify(checked));
+  }, [checked]);
+
+  const ingredients = useMemo(() => {
+    const list = {};
+    const daysToCount = menu.slice(0, period);
+    
+    daysToCount.forEach(day => {
+      Object.values(day).forEach(meal => {
+        meal.forEach(item => {
+          if (list[item.name]) {
+            list[item.name] += item.weight;
+          } else {
+            list[item.name] = item.weight;
+          }
+        });
+      });
+    });
+    return Object.entries(list).sort();
+  }, [menu, period]);
+
+  const toggleCheck = (name) => {
+    setChecked(prev => ({ ...prev, [name]: !prev[name] }));
+  };
+
+  return (
+    <div className="p-6 pb-24 min-h-screen">
+      <header className="mb-6 flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Список покупок</h2>
+          <p className="text-gray-400 text-sm">Соберите корзину</p>
+        </div>
+        <div className="flex bg-gray-800 rounded-lg p-1">
+          <button 
+            onClick={() => setPeriod(3)}
+            className={`px-3 py-1 text-xs rounded-md transition-all ${period === 3 ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            3 дня
+          </button>
+          <button 
+            onClick={() => setPeriod(7)}
+            className={`px-3 py-1 text-xs rounded-md transition-all ${period === 7 ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            7 дней
+          </button>
+        </div>
+      </header>
+
+      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+        {ingredients.map(([name, weight], idx) => (
+          <div 
+            key={name} 
+            onClick={() => toggleCheck(name)}
+            className={`p-4 flex items-center justify-between border-b border-gray-700 last:border-0 cursor-pointer transition-all duration-200 hover:bg-gray-700 hover:pl-5 hover:border-l-2 hover:border-l-teal-500 ${checked[name] ? 'opacity-40 bg-gray-800' : 'bg-gray-800'}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${checked[name] ? 'bg-green-500 border-green-500' : 'border-gray-600'}`}>
+                {checked[name] && <Check size={14} className="text-white" />}
+              </div>
+              <span className={`text-sm font-medium ${checked[name] ? 'text-gray-500 line-through' : 'text-white'}`}>
+                {name}
+              </span>
+            </div>
+            <span className="text-sm text-orange-500 font-semibold bg-orange-500/10 px-2 py-1 rounded">
+              {Math.round(weight)}г
+            </span>
+          </div>
+        ))}
+      </div>
+      
+      {ingredients.length === 0 && (
+        <div className="text-center text-gray-500 mt-10">
+          Список пуст
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ГЛАВНЫЙ КОМПОНЕНТ
+function App() {
+  // Используем Lazy Initialization для мгновенной загрузки состояния из LS
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pn_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [menu, setMenu] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pn_menu');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Сохраняем данные при любом изменении (кроме начальной загрузки, если они уже там)
+  useEffect(() => {
+    if (user) localStorage.setItem('pn_user', JSON.stringify(user));
+    if (menu.length > 0) localStorage.setItem('pn_menu', JSON.stringify(menu));
+  }, [user, menu]);
+
+  const handleOnboardingComplete = (data) => {
+    setUser(data);
+    const newMenu = generateWeekMenu(data.strategy.macros);
+    setMenu(newMenu);
+    setActiveTab('dashboard');
+  };
+
+  const handleReset = () => {
+    if (confirm('Вы уверены? Все данные и меню будут удалены.')) {
+      localStorage.clear();
+      setUser(null);
+      setMenu([]);
+      // Принудительная перезагрузка для очистки состояний в дочерних компонентах
+      window.location.reload();
+    }
+  };
+
+  if (!user) return <Onboarding onComplete={handleOnboardingComplete} />;
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-300 font-sans selection:bg-orange-500/30">
+      {activeTab === 'dashboard' && <Dashboard strategy={user.strategy} />}
+      {activeTab === 'menu' && <MealPlan menu={menu} setMenu={setMenu} strategy={user.strategy} />}
+      {activeTab === 'grocery' && <GroceryList menu={menu} />}
+      {activeTab === 'settings' && (
+        <div className="p-6 flex flex-col items-center justify-center h-[80vh]">
+            <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mb-4 hover:scale-110 transition-transform duration-300 shadow-lg shadow-gray-900">
+                <Settings className="text-gray-400" size={40} />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Настройки</h2>
+            <p className="text-center text-gray-500 mb-8 max-w-xs">
+                Здесь вы можете сбросить свой прогресс и пересчитать калорийность.
+            </p>
+            <button 
+                onClick={handleReset}
+                className="flex items-center gap-2 px-6 py-3 bg-red-600/10 text-red-500 rounded-xl border border-red-600/20 hover:bg-red-600/20 hover:scale-105 transition-all duration-300"
+            >
+                <Trash2 size={18} /> Сбросить данные
+            </button>
+            <div className="mt-auto text-xs text-gray-700 pb-20">
+                v1.0.0 • Pocket Nutritionist
+            </div>
+        </div>
+      )}
+      <TabBar active={activeTab} setActive={setActiveTab} />
+    </div>
+  );
+}
+
+export default App;
